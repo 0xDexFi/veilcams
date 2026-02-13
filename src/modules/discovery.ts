@@ -21,11 +21,34 @@ export async function runDiscovery(
   for (const target of targets) {
     const targetStr = target.range || target.host!;
     const ports = target.ports.length > 0 ? target.ports : ALL_CAMERA_PORTS;
+    const isUserSpecifiedPorts = target.host && target.ports.length > 0 && target.ports.length <= 10;
     targetsScanned++;
+
+    // If user specified exact ports on a single host, trust them and skip nmap
+    if (isUserSpecifiedPorts) {
+      console.log(`[discovery] User specified ports for ${targetStr}: ${ports.join(',')} — skipping nmap, using direct`);
+      for (const port of ports) {
+        allHosts.push({
+          ip: target.host!,
+          port,
+          service: port === 554 || port === 8554 || port === 8555 || port === 10554 ? 'rtsp' : 'http',
+          banner: '',
+          state: 'open',
+        });
+      }
+      continue;
+    }
 
     try {
       const hosts = await nmapScan(targetStr, ports, outputDir);
-      allHosts.push(...hosts);
+      // If nmap returned nothing, fall back to TCP connect scan
+      if (hosts.length === 0 && !targetStr.includes('/')) {
+        console.log(`[discovery] nmap found no open ports on ${targetStr}, trying TCP connect fallback...`);
+        const tcpHosts = await tcpConnectScan(targetStr, ports);
+        allHosts.push(...tcpHosts);
+      } else {
+        allHosts.push(...hosts);
+      }
     } catch (error) {
       console.error(`[discovery] nmap scan failed for ${targetStr}: ${error}`);
       // Fallback to TCP connect scan

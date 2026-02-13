@@ -108,18 +108,28 @@ cmd_start() {
 
     # Interactive prompt if no TARGETS provided
     if [[ -z "${TARGETS:-}" ]]; then
-        echo -e "${BOLD}Enter target IP or range to scan:${NC}"
-        echo -e "${CYAN}  Examples:${NC}"
-        echo -e "    192.168.1.100        (single camera)"
-        echo -e "    192.168.1.0/24       (entire subnet)"
-        echo -e "    10.0.0.50;10.0.0.51  (multiple hosts)"
+        echo -e "${BOLD}Enter target IP or range:${NC}"
+        echo -e "${CYAN}  Examples: 192.168.1.100 / 192.168.1.0/24 / 10.0.0.50;10.0.0.51${NC}"
         echo ""
-        echo -ne "${GREEN}> ${NC}"
-        read -r TARGETS
+        echo -ne "${GREEN}IP> ${NC}"
+        read -r TARGET_IP
 
-        if [[ -z "$TARGETS" ]]; then
+        if [[ -z "$TARGET_IP" ]]; then
             echo -e "${RED}Error: No target provided.${NC}"
             exit 1
+        fi
+
+        echo ""
+        echo -e "${BOLD}Enter open port(s) if known, or press Enter to scan all:${NC}"
+        echo -e "${CYAN}  Examples: 554 / 80,554 / (empty = scan all camera ports)${NC}"
+        echo ""
+        echo -ne "${GREEN}PORT> ${NC}"
+        read -r TARGET_PORTS
+
+        if [[ -n "$TARGET_PORTS" ]]; then
+            TARGETS="${TARGET_IP}:${TARGET_PORTS}"
+        else
+            TARGETS="$TARGET_IP"
         fi
     fi
 

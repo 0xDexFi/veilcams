@@ -44,19 +44,32 @@ async function promptForTarget(): Promise<string> {
   const { createInterface } = await import('node:readline');
   const rl = createInterface({ input: process.stdin, output: process.stdout });
 
-  return new Promise((resolve) => {
-    console.log('');
-    console.log('\x1b[1mEnter target IP or range to scan:\x1b[0m');
-    console.log('\x1b[36m  Examples:\x1b[0m');
-    console.log('    192.168.1.100        (single camera)');
-    console.log('    192.168.1.0/24       (entire subnet)');
-    console.log('    10.0.0.50;10.0.0.51  (multiple hosts)');
-    console.log('');
-    rl.question('\x1b[32m> \x1b[0m', (answer) => {
-      rl.close();
-      resolve(answer.trim());
-    });
-  });
+  const ask = (prompt: string): Promise<string> =>
+    new Promise((resolve) => rl.question(prompt, (answer) => resolve(answer.trim())));
+
+  console.log('');
+  console.log('\x1b[1mEnter target IP or range:\x1b[0m');
+  console.log('\x1b[36m  Examples: 192.168.1.100 / 192.168.1.0/24 / 10.0.0.50;10.0.0.51\x1b[0m');
+  console.log('');
+  const ip = await ask('\x1b[32mIP> \x1b[0m');
+
+  if (!ip) {
+    rl.close();
+    return '';
+  }
+
+  console.log('');
+  console.log('\x1b[1mEnter open port(s) if known, or press Enter to scan all:\x1b[0m');
+  console.log('\x1b[36m  Examples: 554 / 80,554 / (empty = scan all camera ports)\x1b[0m');
+  console.log('');
+  const ports = await ask('\x1b[32mPORT> \x1b[0m');
+
+  rl.close();
+
+  if (ports) {
+    return `${ip}:${ports}`;
+  }
+  return ip;
 }
 
 async function main() {
