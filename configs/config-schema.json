@@ -1,0 +1,168 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "VeilCams Configuration",
+  "type": "object",
+  "required": ["targets"],
+  "additionalProperties": false,
+  "properties": {
+    "targets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "properties": {
+          "range": {
+            "type": "string",
+            "pattern": "^[0-9./]+$",
+            "description": "CIDR range (e.g., 192.168.1.0/24)"
+          },
+          "host": {
+            "type": "string",
+            "description": "Single host IP or hostname"
+          },
+          "ports": {
+            "type": "array",
+            "items": { "type": "integer", "minimum": 1, "maximum": 65535 },
+            "minItems": 1,
+            "description": "Ports to scan"
+          }
+        },
+        "required": ["ports"],
+        "oneOf": [
+          { "required": ["range"] },
+          { "required": ["host"] }
+        ]
+      }
+    },
+    "credentials": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "use_defaults": {
+          "type": "boolean",
+          "default": true,
+          "description": "Use built-in vendor default credentials"
+        },
+        "custom": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": ["username", "password"],
+            "additionalProperties": false,
+            "properties": {
+              "username": { "type": "string" },
+              "password": { "type": "string" }
+            }
+          }
+        },
+        "max_attempts_per_host": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 15
+        },
+        "delay_ms": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 60000,
+          "default": 1000
+        }
+      }
+    },
+    "cve_testing": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "safe_mode": {
+          "type": "boolean",
+          "default": true,
+          "description": "Only run non-destructive checks"
+        },
+        "categories": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["auth_bypass", "info_disclosure", "command_injection", "buffer_overflow", "path_traversal"]
+          }
+        },
+        "ai_enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable AI-powered CVE scanning via Claude (requires ANTHROPIC_API_KEY)"
+        },
+        "ai_model": {
+          "type": "string",
+          "default": "claude-sonnet-4-5-20250929",
+          "description": "Anthropic model ID for CVE analysis"
+        },
+        "ai_max_cves_per_host": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 20,
+          "description": "Maximum number of CVEs to test per host via AI engine"
+        }
+      }
+    },
+    "protocols": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rtsp": { "type": "boolean", "default": true },
+        "onvif": { "type": "boolean", "default": true },
+        "http": { "type": "boolean", "default": true },
+        "telnet": { "type": "boolean", "default": false },
+        "ssh": { "type": "boolean", "default": false }
+      }
+    },
+    "reporting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "format": {
+          "type": "string",
+          "enum": ["markdown", "json"],
+          "default": "markdown"
+        },
+        "include_poc": {
+          "type": "boolean",
+          "default": true
+        },
+        "severity_threshold": {
+          "type": "string",
+          "enum": ["critical", "high", "medium", "low", "info"],
+          "default": "low"
+        }
+      }
+    },
+    "rate_limiting": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "max_concurrent_hosts": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50,
+          "default": 10
+        },
+        "requests_per_second": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 5
+        },
+        "timeout_ms": {
+          "type": "integer",
+          "minimum": 1000,
+          "maximum": 60000,
+          "default": 10000
+        }
+      }
+    }
+  }
+}

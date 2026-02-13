@@ -1,0 +1,44 @@
+targets:
+  - range: "192.168.1.0/24"
+    ports: [80, 443, 554, 8080]
+  - host: "10.0.0.50"
+    ports: [80, 554, 8080]
+
+credentials:
+  use_defaults: true
+  custom:
+    - username: "admin"
+      password: "company2024"
+    - username: "operator"
+      password: "oper1234"
+  max_attempts_per_host: 15
+  delay_ms: 1000
+
+cve_testing:
+  enabled: true
+  safe_mode: true
+  categories:
+    - auth_bypass
+    - info_disclosure
+    - command_injection
+    - path_traversal
+  ai_enabled: true
+  ai_model: "claude-sonnet-4-5-20250929"
+  ai_max_cves_per_host: 20
+
+protocols:
+  rtsp: true
+  onvif: true
+  http: true
+  telnet: false
+  ssh: false
+
+reporting:
+  format: markdown
+  include_poc: true
+  severity_threshold: low
+
+rate_limiting:
+  max_concurrent_hosts: 10
+  requests_per_second: 5
+  timeout_ms: 10000

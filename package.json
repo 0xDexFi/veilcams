@@ -1,0 +1,38 @@
+{
+  "name": "veilcams",
+  "version": "1.0.0",
+  "description": "Webcam security testing framework — credential brute-force and CVE exploitation pipeline",
+  "type": "module",
+  "scripts": {
+    "build": "tsc",
+    "temporal:server": "docker compose up temporal -d",
+    "temporal:server:stop": "docker compose down",
+    "temporal:worker": "node dist/temporal/worker.js",
+    "temporal:start": "node dist/temporal/client.js",
+    "temporal:query": "node dist/temporal/query.js"
+  },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0",
+    "@temporalio/activity": "^1.11.0",
+    "@temporalio/client": "^1.11.0",
+    "@temporalio/worker": "^1.11.0",
+    "@temporalio/workflow": "^1.11.0",
+    "ajv": "^8.12.0",
+    "ajv-formats": "^2.1.1",
+    "axios": "^1.7.0",
+    "boxen": "^8.0.1",
+    "chalk": "^5.0.0",
+    "dotenv": "^16.4.5",
+    "figlet": "^1.9.3",
+    "gradient-string": "^3.0.0",
+    "js-yaml": "^4.1.0",
+    "xml2js": "^0.6.2",
+    "zod": "^3.22.4"
+  },
+  "devDependencies": {
+    "@types/js-yaml": "^4.0.9",
+    "@types/node": "^22.0.0",
+    "@types/xml2js": "^0.4.14",
+    "typescript": "^5.6.0"
+  }
+}
