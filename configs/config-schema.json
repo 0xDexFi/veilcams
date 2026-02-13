@@ -117,7 +117,24 @@
         "onvif": { "type": "boolean", "default": true },
         "http": { "type": "boolean", "default": true },
         "telnet": { "type": "boolean", "default": false },
-        "ssh": { "type": "boolean", "default": false }
+        "ssh": { "type": "boolean", "default": false },
+        "ai_enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable AI-powered protocol fuzzing via Claude (requires ANTHROPIC_API_KEY)"
+        },
+        "ai_model": {
+          "type": "string",
+          "default": "claude-sonnet-4-5-20250929",
+          "description": "Anthropic model ID for protocol fuzzing AI"
+        },
+        "ai_max_paths_per_host": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 30,
+          "description": "Maximum number of additional paths to generate per host via AI"
+        }
       }
     },
     "reporting": {

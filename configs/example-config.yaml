@@ -32,6 +32,9 @@ protocols:
   http: true
   telnet: false
   ssh: false
+  ai_enabled: false
+  ai_model: "claude-sonnet-4-5-20250929"
+  ai_max_paths_per_host: 30
 
 reporting:
   format: markdown

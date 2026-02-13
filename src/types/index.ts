@@ -182,6 +182,10 @@ export interface ProtocolFinding {
   evidence: string;
   authenticated: boolean;
   timestamp: string;
+  source?: 'static' | 'ai';
+  confidence?: 'high' | 'medium' | 'low';
+  falsePositiveRisk?: 'low' | 'medium' | 'high';
+  reasoning?: string;
 }
 
 export interface ProtocolModuleResult {
@@ -226,6 +230,9 @@ export interface ProtocolConfig {
   http: boolean;
   telnet: boolean;
   ssh: boolean;
+  ai_enabled: boolean;
+  ai_model: string;
+  ai_max_paths_per_host: number;
 }
 
 export interface ReportingConfig {

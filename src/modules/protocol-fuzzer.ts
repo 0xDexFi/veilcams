@@ -9,6 +9,12 @@ import type {
 import { RTSP_PATHS, SNAPSHOT_ENDPOINTS, CONFIG_DISCLOSURE_PATHS } from '../constants.js';
 import { httpGet, rtspDescribe } from '../utils/network.js';
 import { parallelLimit, RateLimiter } from '../utils/concurrency.js';
+import {
+  generateAiPaths,
+  executeAiProbes,
+  verifyFindings,
+  applyVerification,
+} from '../ai/claude-protocol-engine.js';
 
 /**
  * Phase 3c: Protocol Fuzzer
@@ -86,12 +92,18 @@ async function fuzzHost(
   const findings: ProtocolFinding[] = [];
   let pathsTested = 0;
   const rateLimiter = new RateLimiter(config.rate_limiting?.requests_per_second ?? 5);
+  const staticPathsTested: string[] = [];
 
   // 1. RTSP path discovery (skip if another target for the same IP already handles it)
   if (config.protocols.rtsp && target.protocols.includes('rtsp') && !skipRtsp) {
     const rtspFindings = await fuzzRtspPaths(target, rateLimiter);
     findings.push(...rtspFindings.findings);
     pathsTested += rtspFindings.pathsTested;
+    const rtspPaths = [
+      ...(RTSP_PATHS[target.vendor] || []),
+      ...RTSP_PATHS.unknown,
+    ];
+    staticPathsTested.push(...new Set(rtspPaths));
   }
 
   // 2. Snapshot endpoint discovery
@@ -99,6 +111,11 @@ async function fuzzHost(
     const snapFindings = await fuzzSnapshotEndpoints(target, rateLimiter);
     findings.push(...snapFindings.findings);
     pathsTested += snapFindings.pathsTested;
+    const snapPaths = [
+      ...(SNAPSHOT_ENDPOINTS[target.vendor] || []),
+      ...SNAPSHOT_ENDPOINTS.unknown,
+    ];
+    staticPathsTested.push(...new Set(snapPaths));
   }
 
   // 3. Config file disclosure
@@ -106,6 +123,7 @@ async function fuzzHost(
     const configFindings = await fuzzConfigPaths(target, rateLimiter);
     findings.push(...configFindings.findings);
     pathsTested += configFindings.pathsTested;
+    staticPathsTested.push(...CONFIG_DISCLOSURE_PATHS);
   }
 
   // 4. Common admin/debug endpoints
@@ -113,6 +131,58 @@ async function fuzzHost(
     const adminFindings = await fuzzAdminEndpoints(target, rateLimiter);
     findings.push(...adminFindings.findings);
     pathsTested += adminFindings.pathsTested;
+    staticPathsTested.push(
+      '/admin/', '/admin.html', '/cgi-bin/', '/debug/', '/test/',
+      '/phpinfo.php', '/server-status', '/server-info', '/actuator',
+      '/api/', '/api/v1/', '/swagger-ui.html', '/console/', '/shell/',
+      '/telnet.cgi', '/system/', '/maintenance/', '/firmware/',
+      '/upgrade/', '/backup/', '/restore/', '/reboot/',
+      '/factory-reset/', '/diag.cgi', '/debug.cgi',
+    );
+  }
+
+  // 5. AI-powered path generation and probing
+  if (config.protocols.ai_enabled) {
+    try {
+      const aiProbes = await generateAiPaths(target, staticPathsTested, {
+        model: config.protocols.ai_model,
+        maxPaths: config.protocols.ai_max_paths_per_host,
+      });
+
+      if (aiProbes.length > 0) {
+        console.log(`[ai-protocol] Testing ${aiProbes.length} AI-generated paths for ${target.ip}:${target.port}...`);
+        const aiFindings = await executeAiProbes(
+          target,
+          aiProbes,
+          () => rateLimiter.acquire()
+        );
+        findings.push(...aiFindings);
+        pathsTested += aiProbes.length;
+      }
+    } catch (error) {
+      console.error(`[ai-protocol] AI path generation failed for ${target.ip}:${target.port}: ${(error as Error).message}`);
+    }
+  }
+
+  // 6. AI-powered finding verification (verifies ALL positive findings — static + AI)
+  if (config.protocols.ai_enabled && findings.length > 0) {
+    try {
+      const verifications = await verifyFindings(target, findings, {
+        model: config.protocols.ai_model,
+      });
+
+      if (verifications.length > 0) {
+        const beforeCount = findings.length;
+        const verified = applyVerification(findings, verifications);
+        const removed = beforeCount - verified.length;
+        if (removed > 0) {
+          console.log(`[ai-protocol] Verification removed ${removed} false positive(s) for ${target.ip}:${target.port}`);
+        }
+        return { findings: verified, pathsTested };
+      }
+    } catch (error) {
+      console.error(`[ai-protocol] AI verification failed for ${target.ip}:${target.port}: ${(error as Error).message}`);
+    }
   }
 
   return { findings, pathsTested };

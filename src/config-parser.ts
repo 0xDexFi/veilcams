@@ -111,8 +111,14 @@ function coerceTypes(raw: Record<string, unknown>): Record<string, unknown> {
 
   const protocols = result.protocols as Record<string, unknown> | undefined;
   if (protocols) {
-    for (const key of Object.keys(protocols)) {
-      protocols[key] = String(protocols[key]) === 'true';
+    const booleanKeys = ['rtsp', 'onvif', 'http', 'telnet', 'ssh', 'ai_enabled'];
+    for (const key of booleanKeys) {
+      if (protocols[key] !== undefined) {
+        protocols[key] = String(protocols[key]) === 'true';
+      }
+    }
+    if (protocols.ai_max_paths_per_host) {
+      protocols.ai_max_paths_per_host = parseInt(String(protocols.ai_max_paths_per_host), 10);
     }
   }
 
@@ -159,6 +165,9 @@ function applyDefaults(raw: Record<string, unknown>): VeilcamsConfig {
       http: true,
       telnet: false,
       ssh: false,
+      ai_enabled: false,
+      ai_model: 'claude-sonnet-4-5-20250929',
+      ai_max_paths_per_host: DEFAULTS.AI_PROTOCOL_MAX_PATHS_PER_HOST,
       ...(raw.protocols as Partial<VeilcamsConfig['protocols']> || {}),
     },
 
