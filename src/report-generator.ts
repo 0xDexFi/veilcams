@@ -138,11 +138,13 @@ export async function generateReport(
       lines.push('#### Proof of Concept');
       lines.push('');
       for (const cred of successfulCreds) {
-        const scheme = cred.protocol === 'rtsp' ? 'rtsp' : cred.protocol;
         if (cred.protocol === 'rtsp') {
+          const rtspUrl = `rtsp://${cred.credential.username}:${cred.credential.password}@${cred.ip}:${cred.port}/`;
           lines.push(`\`\`\`bash`);
           lines.push(`# ${cred.ip}:${cred.port} (${cred.vendor})`);
-          lines.push(`ffplay rtsp://${cred.credential.username}:${cred.credential.password}@${cred.ip}:${cred.port}/`);
+          lines.push(`# VLC: ${rtspUrl}`);
+          lines.push(`vlc "${rtspUrl}"`);
+          lines.push(`# or: ffplay "${rtspUrl}"`);
           lines.push(`\`\`\``);
         } else {
           lines.push(`\`\`\`bash`);
@@ -252,30 +254,52 @@ export async function generateReport(
     .sort((a, b) => SEVERITY_ORDER[a.severity] - SEVERITY_ORDER[b.severity]);
 
   if (filteredFindings.length > 0) {
-    lines.push('| Severity | IP | Port | Type | Path | Auth Required | Evidence |');
-    lines.push('|----------|----|------|------|------|--------------|----------|');
+    lines.push('| Severity | Type | URL | Auth Required | Evidence |');
+    lines.push('|----------|------|-----|--------------|----------|');
     for (const finding of filteredFindings) {
+      const scheme = finding.protocol === 'rtsp' ? 'rtsp'
+        : finding.protocol === 'https' ? 'https' : 'http';
+      const fullUrl = `${scheme}://${finding.ip}:${finding.port}${finding.path}`;
+      const source = finding.source === 'ai' ? ' (AI)' : '';
       lines.push(
-        `| ${finding.severity.toUpperCase()} | ${finding.ip} | ${finding.port} | ${finding.type} | \`${finding.path}\` | ${finding.authenticated ? 'Yes' : '**No**'} | ${finding.evidence} |`
+        `| ${finding.severity.toUpperCase()}${source} | ${finding.type} | \`${fullUrl}\` | ${finding.authenticated ? 'Yes' : '**No**'} | ${finding.evidence} |`
       );
     }
     lines.push('');
 
-    if (includePoc) {
-      const unauthFindings = filteredFindings.filter((f) => !f.authenticated && f.severity !== 'info');
-      if (unauthFindings.length > 0) {
-        lines.push('#### Proof of Concept — Unauthenticated Access');
+    // VLC-ready URLs section — copy-paste directly into VLC / browser
+    const unauthFindings = filteredFindings.filter((f) => !f.authenticated && f.severity !== 'info');
+    if (unauthFindings.length > 0) {
+      lines.push('#### Verification URLs');
+      lines.push('');
+      lines.push('> Copy-paste these URLs directly into VLC (Media > Open Network Stream) or a browser to verify findings.');
+      lines.push('');
+      for (const finding of unauthFindings) {
+        const scheme = finding.protocol === 'rtsp' ? 'rtsp'
+          : finding.protocol === 'https' ? 'https' : 'http';
+        const fullUrl = `${scheme}://${finding.ip}:${finding.port}${finding.path}`;
+        lines.push(`- **${finding.type}**: \`${fullUrl}\``);
+      }
+      lines.push('');
+
+      if (includePoc) {
+        lines.push('#### Proof of Concept Commands');
         lines.push('');
         for (const finding of unauthFindings.slice(0, 10)) {
-          const url = finding.protocol === 'rtsp'
-            ? `rtsp://${finding.ip}:${finding.port}${finding.path}`
-            : `http://${finding.ip}:${finding.port}${finding.path}`;
+          const scheme = finding.protocol === 'rtsp' ? 'rtsp'
+            : finding.protocol === 'https' ? 'https' : 'http';
+          const fullUrl = `${scheme}://${finding.ip}:${finding.port}${finding.path}`;
           lines.push(`\`\`\`bash`);
           lines.push(`# ${finding.type} on ${finding.ip}:${finding.port}`);
           if (finding.protocol === 'rtsp') {
-            lines.push(`ffplay "${url}"`);
+            lines.push(`vlc "${fullUrl}"`);
+            lines.push(`# or: ffplay "${fullUrl}"`);
+          } else if (finding.type === 'snapshot_endpoint') {
+            lines.push(`curl -o snapshot.jpg "${fullUrl}"`);
+            lines.push(`# or open in browser: ${fullUrl}`);
           } else {
-            lines.push(`curl "${url}"`);
+            lines.push(`curl "${fullUrl}"`);
+            lines.push(`# or open in browser: ${fullUrl}`);
           }
           lines.push(`\`\`\``);
           lines.push('');
