@@ -179,7 +179,7 @@ function applyDefaults(raw: Record<string, unknown>): VeilcamsConfig {
     },
 
     exploitation: {
-      enabled: false,
+      enabled: true,
       timeout_per_exploit: DEFAULTS.EXPLOITATION_TIMEOUT_MS,
       auto_exploit_confirmed: true,
       ...(raw.exploitation as Partial<VeilcamsConfig['exploitation']> || {}),

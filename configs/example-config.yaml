@@ -27,7 +27,7 @@ cve_testing:
   ai_max_cves_per_host: 20
 
 exploitation:
-  enabled: false
+  enabled: true
   timeout_per_exploit: 60000
   auto_exploit_confirmed: true
 
