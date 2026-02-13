@@ -6,6 +6,7 @@ import type {
   ProtocolModuleResult,
   VeilcamsConfig,
 } from '../types/index.js';
+import { createHash } from 'node:crypto';
 import { RTSP_PATHS, SNAPSHOT_ENDPOINTS, CONFIG_DISCLOSURE_PATHS } from '../constants.js';
 import { httpGet, rtspDescribe } from '../utils/network.js';
 import { parallelLimit, RateLimiter } from '../utils/concurrency.js';
@@ -207,20 +208,31 @@ async function fuzzRtspPaths(
       const result = await rtspDescribe(target.ip, rtspPort, streamPath, undefined, 5000);
 
       if (result.statusCode === 200) {
-        findings.push({
-          ip: target.ip,
-          port: rtspPort,
-          type: 'rtsp_stream',
-          protocol: 'rtsp',
-          path: streamPath,
-          severity: 'high',
-          description: 'RTSP stream accessible without authentication',
-          evidence: `RTSP DESCRIBE returned ${result.statusCode} for path ${streamPath}`,
-          authenticated: false,
-          timestamp: new Date().toISOString(),
-        });
+        // Validate the response actually contains SDP data (real stream).
+        // A bare 200 with no SDP means the server accepts any path — false positive.
+        const raw = result.raw || '';
+        const hasSdp = /v=0/.test(raw) && /m=(video|audio|application)/.test(raw);
+        const hasContentType = /Content-Type:\s*application\/sdp/i.test(raw);
+
+        if (hasSdp || hasContentType) {
+          findings.push({
+            ip: target.ip,
+            port: rtspPort,
+            type: 'rtsp_stream',
+            protocol: 'rtsp',
+            path: streamPath,
+            severity: 'high',
+            description: 'RTSP stream accessible without authentication',
+            evidence: `RTSP DESCRIBE returned ${result.statusCode} with valid SDP for ${streamPath}`,
+            authenticated: false,
+            timestamp: new Date().toISOString(),
+          });
+        }
+        // else: 200 but no SDP — camera accepts any path, skip it
       } else if (result.statusCode === 401) {
-        // Stream exists but requires auth — still useful info
+        // Stream exists but requires auth — still useful info.
+        // 401 is more reliable than 200 because the server specifically
+        // identified this path as a protected resource.
         findings.push({
           ip: target.ip,
           port: rtspPort,
@@ -260,7 +272,11 @@ async function fuzzSnapshotEndpoints(
       const resp = await httpGet(`${baseUrl}${endpoint}`, { timeout: 5000 });
       const contentType = (resp.headers as Record<string, string>)['content-type'] || '';
 
-      if (resp.status === 200 && (contentType.includes('image/') || contentType.includes('octet-stream'))) {
+      // Must be an image content type AND have a reasonable body size for an image (>1KB)
+      const bodyLen = resp.data ? (typeof resp.data === 'string' ? resp.data.length : JSON.stringify(resp.data).length) : 0;
+      const isImage = contentType.includes('image/') || contentType.includes('octet-stream');
+
+      if (resp.status === 200 && isImage && bodyLen > 1024) {
         findings.push({
           ip: target.ip,
           port: target.port,
@@ -269,7 +285,7 @@ async function fuzzSnapshotEndpoints(
           path: endpoint,
           severity: 'medium',
           description: 'Camera snapshot accessible without authentication',
-          evidence: `HTTP ${resp.status} at ${endpoint} (Content-Type: ${contentType})`,
+          evidence: `HTTP ${resp.status} at ${endpoint} (Content-Type: ${contentType}, ${bodyLen} bytes)`,
           authenticated: false,
           timestamp: new Date().toISOString(),
         });
@@ -288,37 +304,57 @@ async function fuzzConfigPaths(
   const scheme = target.protocols.includes('https') ? 'https' : 'http';
   const baseUrl = `${scheme}://${target.ip}:${target.port}`;
 
+  // Get a baseline hash to detect "same page for every path" behavior
+  let baselineHash = '';
+  try {
+    await rateLimiter.acquire();
+    const baseline = await httpGet(`${baseUrl}/_veilcams_nonexistent_cfg_${Date.now()}`, {
+      timeout: 5000,
+    });
+    const baselineBody = typeof baseline.data === 'string' ? baseline.data : '';
+    if (baseline.status === 200 && baselineBody.length > 0) {
+      baselineHash = createHash('md5').update(baselineBody).digest('hex');
+    }
+  } catch { /* baseline unavailable */ }
+
   for (const configPath of CONFIG_DISCLOSURE_PATHS) {
     await rateLimiter.acquire();
     try {
       const resp = await httpGet(`${baseUrl}${configPath}`, { timeout: 5000 });
       const body = typeof resp.data === 'string' ? resp.data : '';
 
-      if (
-        resp.status === 200 &&
-        body.length > 20 &&
-        !body.includes('<!DOCTYPE') &&
-        !body.includes('<html')
-      ) {
-        // Determine severity based on content
-        const hasCredentials = /(password|passwd|secret|token|key)/i.test(body);
-        const severity = hasCredentials ? 'critical' : 'high';
+      if (resp.status !== 200 || body.length <= 20) continue;
 
-        findings.push({
-          ip: target.ip,
-          port: target.port,
-          type: 'config_disclosure',
-          protocol: scheme === 'https' ? 'https' : 'http',
-          path: configPath,
-          severity,
-          description: hasCredentials
-            ? 'Configuration file with credentials exposed'
-            : 'Configuration file exposed without authentication',
-          evidence: `HTTP ${resp.status} at ${configPath} (${body.length} bytes)${hasCredentials ? ' — contains credential-like data' : ''}`,
-          authenticated: false,
-          timestamp: new Date().toISOString(),
-        });
+      // Skip if identical to baseline
+      if (baselineHash) {
+        const bodyHash = createHash('md5').update(body).digest('hex');
+        if (bodyHash === baselineHash) continue;
       }
+
+      // Skip any HTML response — config files are never HTML
+      if (/<(!DOCTYPE|html|head|body|div|script|link|meta)/i.test(body)) continue;
+
+      // Skip login/redirect pages
+      if (/login|sign\s*in|window\.location|location\.href/i.test(body)) continue;
+
+      // Determine severity based on content
+      const hasCredentials = /(password|passwd|secret|token|key)\s*[:=]/i.test(body);
+      const severity = hasCredentials ? 'critical' : 'high';
+
+      findings.push({
+        ip: target.ip,
+        port: target.port,
+        type: 'config_disclosure',
+        protocol: scheme === 'https' ? 'https' : 'http',
+        path: configPath,
+        severity,
+        description: hasCredentials
+          ? 'Configuration file with credentials exposed'
+          : 'Configuration file exposed without authentication',
+        evidence: `HTTP ${resp.status} at ${configPath} (${body.length} bytes)${hasCredentials ? ' — contains credential-like data' : ''}`,
+        authenticated: false,
+        timestamp: new Date().toISOString(),
+      });
     } catch { /* path not accessible */ }
   }
 
@@ -361,6 +397,32 @@ async function fuzzAdminEndpoints(
     '/debug.cgi',
   ];
 
+  // Fetch a baseline from a path that definitely doesn't exist.
+  // Many cameras return their login page / default page for ANY path with 200.
+  // We hash that baseline to detect and discard identical responses.
+  let baselineHash = '';
+  try {
+    await rateLimiter.acquire();
+    const baseline = await httpGet(`${baseUrl}/_veilcams_nonexistent_${Date.now()}`, {
+      timeout: 5000,
+      followRedirects: false,
+    });
+    const baselineBody = typeof baseline.data === 'string' ? baseline.data : '';
+    if (baseline.status === 200 && baselineBody.length > 0) {
+      baselineHash = createHash('md5').update(baselineBody).digest('hex');
+    }
+  } catch { /* baseline unavailable, proceed without dedup */ }
+
+  // Common patterns that indicate a login page or generic error served as 200
+  const falsePositivePatterns = [
+    /login|log\s*in|sign\s*in|authenticate/i,
+    /username.*password|password.*username/is,
+    /<form[^>]*action/i,
+    /window\.location\s*=|location\.href\s*=/i,
+    /redirect|302|moved/i,
+    /not\s*found|404|error|forbidden|denied|unauthorized/i,
+  ];
+
   for (const adminPath of adminPaths) {
     await rateLimiter.acquire();
     try {
@@ -370,20 +432,30 @@ async function fuzzAdminEndpoints(
       });
       const body = typeof resp.data === 'string' ? resp.data : '';
 
-      if (resp.status === 200 && body.length > 50) {
-        findings.push({
-          ip: target.ip,
-          port: target.port,
-          type: 'unauthenticated_access',
-          protocol: scheme === 'https' ? 'https' : 'http',
-          path: adminPath,
-          severity: 'medium',
-          description: `Admin/debug endpoint accessible at ${adminPath}`,
-          evidence: `HTTP ${resp.status} (${body.length} bytes)`,
-          authenticated: false,
-          timestamp: new Date().toISOString(),
-        });
+      if (resp.status !== 200 || body.length <= 50) continue;
+
+      // Skip if response is identical to baseline (camera serves the same page for everything)
+      if (baselineHash) {
+        const bodyHash = createHash('md5').update(body).digest('hex');
+        if (bodyHash === baselineHash) continue;
       }
+
+      // Skip if body matches known false positive patterns (login page, error page, redirect)
+      const isFalsePositive = falsePositivePatterns.some((p) => p.test(body));
+      if (isFalsePositive) continue;
+
+      findings.push({
+        ip: target.ip,
+        port: target.port,
+        type: 'unauthenticated_access',
+        protocol: scheme === 'https' ? 'https' : 'http',
+        path: adminPath,
+        severity: 'medium',
+        description: `Admin/debug endpoint accessible at ${adminPath}`,
+        evidence: `HTTP ${resp.status} (${body.length} bytes)`,
+        authenticated: false,
+        timestamp: new Date().toISOString(),
+      });
     } catch { /* path not accessible */ }
   }
 
