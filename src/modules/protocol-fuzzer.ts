@@ -26,8 +26,32 @@ export async function runProtocolFuzzer(
 
   const concurrency = config.rate_limiting?.max_concurrent_hosts ?? 10;
 
+  // Pre-determine which target "owns" RTSP fuzzing for each IP.
+  // This prevents duplicate findings when both an RTSP-port target (:554) and
+  // an HTTP-port target (:80, which also detects RTSP) exist for the same IP.
+  // Prefer the dedicated RTSP-port target since it was discovered directly.
+  const rtspFuzzOwner = new Map<string, string>();
+  for (const target of targets) {
+    if (config.protocols.rtsp && target.protocols.includes('rtsp')) {
+      const ownerKey = target.ip;
+      const targetKey = `${target.ip}:${target.port}`;
+      const existingOwner = rtspFuzzOwner.get(ownerKey);
+      if (!existingOwner) {
+        rtspFuzzOwner.set(ownerKey, targetKey);
+      } else {
+        // Prefer the target that's on a known RTSP port (554, 8554, etc.)
+        const rtspPorts = [554, 8554, 8555, 10554];
+        if (rtspPorts.includes(target.port) && !rtspPorts.includes(parseInt(existingOwner.split(':')[1]))) {
+          rtspFuzzOwner.set(ownerKey, targetKey);
+        }
+      }
+    }
+  }
+
   const tasks = targets.map((target) => async () => {
-    const result = await fuzzHost(target, config);
+    const targetKey = `${target.ip}:${target.port}`;
+    const skipRtsp = rtspFuzzOwner.get(target.ip) !== targetKey;
+    const result = await fuzzHost(target, config, skipRtsp);
     allFindings.push(...result.findings);
     totalPathsTested += result.pathsTested;
   });
@@ -56,14 +80,15 @@ interface HostFuzzResult {
 
 async function fuzzHost(
   target: FingerprintResult,
-  config: VeilcamsConfig
+  config: VeilcamsConfig,
+  skipRtsp: boolean = false
 ): Promise<HostFuzzResult> {
   const findings: ProtocolFinding[] = [];
   let pathsTested = 0;
   const rateLimiter = new RateLimiter(config.rate_limiting?.requests_per_second ?? 5);
 
-  // 1. RTSP path discovery
-  if (config.protocols.rtsp && target.protocols.includes('rtsp')) {
+  // 1. RTSP path discovery (skip if another target for the same IP already handles it)
+  if (config.protocols.rtsp && target.protocols.includes('rtsp') && !skipRtsp) {
     const rtspFindings = await fuzzRtspPaths(target, rateLimiter);
     findings.push(...rtspFindings.findings);
     pathsTested += rtspFindings.pathsTested;
