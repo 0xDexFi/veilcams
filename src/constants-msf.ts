@@ -1,9 +1,11 @@
 import type { CameraVendor } from './types/index.js';
 
-// ─── Metasploit Module Mapping ───────────────────────────────────
+// ─── Metasploit Module Mapping (Fast Path) ──────────────────────
 //
-// Maps confirmed CVE IDs to their corresponding Metasploit modules.
-// Used by the exploitation module to auto-exploit confirmed vulns.
+// Pre-configured CVE → Metasploit module mappings for known-good configs.
+// These skip the AI module selection step — used as a fast path.
+// Any CVE NOT in this map gets searched dynamically via msfconsole
+// and configured by AI (Claude).
 
 export interface MsfModuleConfig {
   module: string;
