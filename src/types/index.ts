@@ -161,6 +161,40 @@ export interface AiCveResult {
   timestamp: string;
 }
 
+// ─── Exploitation ───────────────────────────────────────────────
+
+export interface ExploitationResult {
+  cveId: string;
+  ip: string;
+  port: number;
+  vendor: CameraVendor;
+  msfModule: string;
+  msfModuleType: 'exploit' | 'auxiliary';
+  success: boolean;
+  output: string;
+  sessionCreated: boolean;
+  sessionType?: string;
+  screenshotPath?: string;
+  error?: string;
+  durationMs: number;
+  timestamp: string;
+}
+
+export interface ExploitationModuleResult {
+  results: ExploitationResult[];
+  totalAttempts: number;
+  successfulExploits: number;
+  failedExploits: number;
+  skippedNoModule: number;
+  durationMs: number;
+}
+
+export interface ExploitationConfig {
+  enabled: boolean;
+  timeout_per_exploit: number;
+  auto_exploit_confirmed: boolean;
+}
+
 // ─── Protocol Fuzzing ────────────────────────────────────────────
 
 export type ProtocolFindingType =
@@ -202,6 +236,7 @@ export interface VeilcamsConfig {
   credentials: CredentialConfig;
   cve_testing: CveTestingConfig;
   protocols: ProtocolConfig;
+  exploitation: ExploitationConfig;
   reporting: ReportingConfig;
   rate_limiting?: RateLimitConfig;
 }
@@ -249,9 +284,9 @@ export interface RateLimitConfig {
 
 // ─── Audit & Metrics ─────────────────────────────────────────────
 
-export type ModuleName = 'discovery' | 'fingerprint' | 'credential-tester' | 'cve-scanner' | 'protocol-fuzzer' | 'report';
+export type ModuleName = 'discovery' | 'fingerprint' | 'credential-tester' | 'cve-scanner' | 'protocol-fuzzer' | 'exploitation' | 'report';
 
-export type PhaseName = 'discovery' | 'fingerprinting' | 'testing' | 'reporting';
+export type PhaseName = 'discovery' | 'fingerprinting' | 'testing' | 'exploitation' | 'reporting';
 
 export type ModuleStatus = 'pending' | 'running' | 'completed' | 'failed' | 'skipped';
 
@@ -281,6 +316,7 @@ export interface SessionMetrics {
     credentialsFound: number;
     vulnerabilitiesFound: number;
     protocolFindings: number;
+    exploitsSuccessful: number;
   };
 }
 

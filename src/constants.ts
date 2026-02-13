@@ -30,6 +30,7 @@ export const MODULE_PHASE_MAP: Record<ModuleName, PhaseName> = {
   'credential-tester': 'testing',
   'cve-scanner': 'testing',
   'protocol-fuzzer': 'testing',
+  'exploitation': 'exploitation',
   'report': 'reporting',
 };
 
@@ -39,6 +40,7 @@ export const MODULE_ORDER: ModuleName[] = [
   'credential-tester',
   'cve-scanner',
   'protocol-fuzzer',
+  'exploitation',
   'report',
 ];
 
@@ -507,4 +509,5 @@ export const DEFAULTS = {
   TESTING_RETRY_BACKOFF_MAX_MS: 30_000,
   TESTING_MAX_ATTEMPTS: 3,
   AI_PROTOCOL_MAX_PATHS_PER_HOST: 30,
+  EXPLOITATION_TIMEOUT_MS: 60_000,
 } as const;

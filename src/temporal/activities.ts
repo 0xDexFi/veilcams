@@ -5,11 +5,13 @@ import type {
   CredentialModuleResult,
   CveModuleResult,
   ProtocolModuleResult,
+  ExploitationModuleResult,
 } from '../types/index.js';
 import type {
   DiscoveryActivityInput,
   FingerprintActivityInput,
   TestingActivityInput,
+  ExploitationActivityInput,
   ReportActivityInput,
 } from './shared.js';
 import { parseConfig, getDefaultConfig } from '../config-parser.js';
@@ -19,6 +21,7 @@ import { runFingerprinting } from '../modules/fingerprint.js';
 import { runCredentialTester } from '../modules/credential-tester.js';
 import { runCveScanner } from '../modules/cve-scanner.js';
 import { runProtocolFuzzer } from '../modules/protocol-fuzzer.js';
+import { runExploitation } from '../modules/exploitation.js';
 import { generateReport } from '../report-generator.js';
 
 // ─── Heartbeat Helper ───────────────────────────────────────────
@@ -185,6 +188,37 @@ export async function runProtocolFuzzerActivity(
   }
 }
 
+// ─── Exploitation Activity ──────────────────────────────────────
+
+export async function runExploitationActivity(
+  input: ExploitationActivityInput
+): Promise<ExploitationModuleResult> {
+  const hb = startHeartbeat('exploitation');
+  const audit = new AuditSession({ sessionId: input.sessionId, outputDir: input.outputPath });
+  await audit.initialize();
+
+  try {
+    await audit.startModule('exploitation', 1);
+    const confirmedCount = input.cveResult.results.filter((r) => r.vulnerable).length;
+    console.log(`[exploitation] Auto-exploiting ${confirmedCount} confirmed CVEs...`);
+
+    const config = input.configPath
+      ? await parseConfig(input.configPath)
+      : getDefaultConfig();
+
+    const result = await runExploitation(input.fingerprints, input.cveResult, config, input.outputPath);
+
+    console.log(`[exploitation] ${result.successfulExploits}/${result.totalAttempts} exploits successful`);
+    await audit.endModule('exploitation', true);
+    return result;
+  } catch (error) {
+    await audit.endModule('exploitation', false, (error as Error).message);
+    throw error;
+  } finally {
+    clearInterval(hb);
+  }
+}
+
 // ─── Report Activity ────────────────────────────────────────────
 
 export async function runReportActivity(
@@ -209,6 +243,7 @@ export async function runReportActivity(
         credentials: input.credentialResult,
         cve: input.cveResult,
         protocol: input.protocolResult,
+        exploitation: input.exploitationResult,
         config,
         sessionId: input.sessionId,
         startTime: input.startTime,
@@ -227,6 +262,7 @@ export async function runReportActivity(
       credentialsFound: input.credentialResult.successfulLogins,
       vulnerabilitiesFound: input.cveResult.vulnerabilitiesFound,
       protocolFindings: input.protocolResult.findingsCount,
+      exploitsSuccessful: input.exploitationResult?.successfulExploits ?? 0,
     });
     return report;
   } catch (error) {

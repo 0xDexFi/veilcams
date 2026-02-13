@@ -5,6 +5,7 @@ import type {
   CredentialModuleResult,
   CveModuleResult,
   ProtocolModuleResult,
+  ExploitationModuleResult,
   ModuleName,
   PhaseName,
   ModuleStatus,
@@ -40,12 +41,18 @@ export interface TestingActivityInput extends ActivityInput {
   fingerprints: FingerprintResult[];
 }
 
+export interface ExploitationActivityInput extends ActivityInput {
+  fingerprints: FingerprintResult[];
+  cveResult: CveModuleResult;
+}
+
 export interface ReportActivityInput extends ActivityInput {
   discoveryResult: DiscoveryResult;
   fingerprints: FingerprintResult[];
   credentialResult: CredentialModuleResult;
   cveResult: CveModuleResult;
   protocolResult: ProtocolModuleResult;
+  exploitationResult?: ExploitationModuleResult;
   startTime: string;
   totalDurationMs: number;
 }

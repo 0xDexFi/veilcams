@@ -122,6 +122,13 @@ function coerceTypes(raw: Record<string, unknown>): Record<string, unknown> {
     }
   }
 
+  const exploitation = result.exploitation as Record<string, unknown> | undefined;
+  if (exploitation) {
+    if (exploitation.enabled !== undefined) exploitation.enabled = String(exploitation.enabled) === 'true';
+    if (exploitation.auto_exploit_confirmed !== undefined) exploitation.auto_exploit_confirmed = String(exploitation.auto_exploit_confirmed) === 'true';
+    if (exploitation.timeout_per_exploit) exploitation.timeout_per_exploit = parseInt(String(exploitation.timeout_per_exploit), 10);
+  }
+
   const reporting = result.reporting as Record<string, unknown> | undefined;
   if (reporting) {
     if (reporting.include_poc !== undefined) reporting.include_poc = String(reporting.include_poc) === 'true';
@@ -169,6 +176,13 @@ function applyDefaults(raw: Record<string, unknown>): VeilcamsConfig {
       ai_model: 'claude-sonnet-4-5-20250929',
       ai_max_paths_per_host: DEFAULTS.AI_PROTOCOL_MAX_PATHS_PER_HOST,
       ...(raw.protocols as Partial<VeilcamsConfig['protocols']> || {}),
+    },
+
+    exploitation: {
+      enabled: false,
+      timeout_per_exploit: DEFAULTS.EXPLOITATION_TIMEOUT_MS,
+      auto_exploit_confirmed: true,
+      ...(raw.exploitation as Partial<VeilcamsConfig['exploitation']> || {}),
     },
 
     reporting: {

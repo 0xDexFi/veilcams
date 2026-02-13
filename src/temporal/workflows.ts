@@ -11,6 +11,7 @@ import type {
   CredentialModuleResult,
   CveModuleResult,
   ProtocolModuleResult,
+  ExploitationModuleResult,
 } from '../types/index.js';
 
 import {
@@ -32,6 +33,7 @@ const {
   runCredentialTesterActivity,
   runCveScannerActivity,
   runProtocolFuzzerActivity,
+  runExploitationActivity,
   runReportActivity,
 } = proxyActivities<typeof activityTypes>({
   startToCloseTimeout: '2 hours',
@@ -198,6 +200,39 @@ export async function veilcamsPipelineWorkflow(input: PipelineInput): Promise<vo
     state.moduleStatuses['protocol-fuzzer'] = 'failed';
   }
 
+  // ── Phase 3.5: Exploitation (Sequential, after CVE results) ──
+
+  let exploitationResult: ExploitationModuleResult | undefined;
+
+  if (cveResult.vulnerabilitiesFound > 0) {
+    state.currentPhase = 'exploitation';
+    state.currentModule = 'exploitation';
+    state.moduleStatuses['exploitation'] = 'running';
+
+    try {
+      exploitationResult = await runExploitationActivity({
+        ...baseInput,
+        fingerprints,
+        cveResult,
+      });
+      state.completedModules.push('exploitation');
+      state.moduleStatuses['exploitation'] = 'completed';
+    } catch {
+      exploitationResult = {
+        results: [],
+        totalAttempts: 0,
+        successfulExploits: 0,
+        failedExploits: 0,
+        skippedNoModule: 0,
+        durationMs: 0,
+      };
+      state.failedModules.push('exploitation');
+      state.moduleStatuses['exploitation'] = 'failed';
+    }
+  } else {
+    state.moduleStatuses['exploitation'] = 'skipped';
+  }
+
   // ── Phase 4: Reporting (Sequential) ──────────────────────────
 
   state.currentPhase = 'reporting';
@@ -212,6 +247,7 @@ export async function veilcamsPipelineWorkflow(input: PipelineInput): Promise<vo
       credentialResult,
       cveResult,
       protocolResult,
+      exploitationResult,
       startTime,
       totalDurationMs: Date.now() - new Date(startTime).getTime(),
     });

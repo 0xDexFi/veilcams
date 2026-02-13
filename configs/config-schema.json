@@ -137,6 +137,29 @@
         }
       }
     },
+    "exploitation": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable auto-exploitation of confirmed CVEs via Metasploit"
+        },
+        "timeout_per_exploit": {
+          "type": "integer",
+          "minimum": 5000,
+          "maximum": 300000,
+          "default": 60000,
+          "description": "Timeout per exploit attempt in milliseconds"
+        },
+        "auto_exploit_confirmed": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically exploit all confirmed CVEs that have a Metasploit module mapping"
+        }
+      }
+    },
     "reporting": {
       "type": "object",
       "additionalProperties": false,

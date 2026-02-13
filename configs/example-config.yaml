@@ -26,6 +26,11 @@ cve_testing:
   ai_model: "claude-sonnet-4-5-20250929"
   ai_max_cves_per_host: 20
 
+exploitation:
+  enabled: false
+  timeout_per_exploit: 60000
+  auto_exploit_confirmed: true
+
 protocols:
   rtsp: true
   onvif: true
