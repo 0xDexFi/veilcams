@@ -25,10 +25,21 @@ FROM node:22-slim
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nmap \
     curl \
+    gnupg2 \
     dnsutils \
     net-tools \
     bash \
+    ffmpeg \
     && rm -rf /var/lib/apt/lists/*
+
+# Install Metasploit Framework
+RUN curl -fsSL https://apt.metasploit.com/metasploit-framework.gpg.key \
+    | gpg --dearmor > /usr/share/keyrings/metasploit-archive-keyring.gpg && \
+    echo "deb [signed-by=/usr/share/keyrings/metasploit-archive-keyring.gpg] https://apt.metasploit.com/ buster main" \
+    > /etc/apt/sources.list.d/metasploit-framework.list && \
+    apt-get update && \
+    apt-get install -y --no-install-recommends metasploit-framework && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create non-root user
 RUN useradd -m -u 1001 -s /bin/bash veilcams
